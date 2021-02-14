@@ -6,13 +6,20 @@
 //
 
 import SwiftUI
+import Combine
 
 struct ContentView: View {
-    @State private var number: Int = 0
+    private static let offTimer = Timer.TimerPublisher(interval: 0, runLoop: .main, mode: .default)
+    private static let countdownMax = 3
+    
+    @State private var number: Int?
     @State private var done: [Int] = []
     @AppStorage("startRange") private var startRange = 1
     @AppStorage("endRange") private var endRange = 30
-
+    @State private var timer = Self.offTimer
+    @State private var cancellable: AnyCancellable?
+    @State private var countdown = 0
+    
     var body: some View {
         VStack {
             HStack {
@@ -26,7 +33,9 @@ struct ContentView: View {
                 Stepper(value: self.$endRange, label: {})
             }
             Spacer()
-            Text("\(number)").font(Font.system(size: 120))
+            Text("888").font(Font.system(size: 120)).opacity(0).accessibility(hidden: true) // For sizing purposes
+                .overlay(self.randomNumberLabel())
+                .overlay(self.countdownLabel())
             Spacer()
             Button(action: buttonAction) {
                 RoundedRectangle(cornerRadius: 25.0)
@@ -36,11 +45,46 @@ struct ContentView: View {
             }
         }
         .padding(50)
+        .onReceive(self.timer, perform: timerAction)
+    }
+    
+    @ViewBuilder private func countdownLabel() -> some View {
+        if self.countdown == 0 {
+            EmptyView()
+        } else {
+            Text("\(self.countdown)").font(Font.system(size: 60))
+                .frame(width: 80, height: 80)
+                .background(Circle().fill(Color.gray))
+        }
+    }
+    
+    @ViewBuilder private func randomNumberLabel() -> some View {
+        if let number = self.number, self.countdown == 0 {
+            Text("\(number)").font(Font.system(size: 120))
+        } else {
+            EmptyView()
+        }
     }
     
     private func buttonAction() {
-        self.done.append(self.number)
-        self.number = self.newRandomNumber()
+        self.number = nil
+        self.countdown = Self.countdownMax
+        let timer = Timer.TimerPublisher(interval: 1.0, runLoop: .main, mode: .default)
+        self.cancellable = timer.connect() as? AnyCancellable
+        self.timer = timer
+    }
+    
+    private func timerAction(_ date: Date) {
+        if self.countdown > 0 {
+            self.countdown -= 1
+        } else {
+            if let number = self.number {
+                self.done.append(number)
+            }
+            self.number = self.newRandomNumber()
+            self.cancellable?.cancel()
+            self.timer = Self.offTimer
+        }
     }
     
     private func makeIntBinding(to intState: Binding<Int>) -> Binding<String> {
